@@ -1,0 +1,57 @@
+SET SCAN OFF
+
+INSERT
+INTO    occ_departments
+       (department_id, 
+        department_name, 
+        location)
+VALUES (1, 
+        'Management', 
+        'London');
+        
+INSERT
+INTO    occ_departments
+       (department_id, 
+        department_name, 
+        location)
+VALUES (2, 
+        'Engineering', 
+        'Cardiff');
+        
+INSERT
+INTO    occ_departments
+       (department_id, 
+        department_name, 
+        location)
+VALUES (3, 
+        'Research & Development', 
+        'Edinburgh');
+        
+INSERT
+INTO    occ_departments
+       (department_id, 
+        department_name, 
+        location)
+VALUES (4, 
+        'Sales', 
+        'Belfast');
+        
+SET CONSTRAINTS EMPLOYEE_MANAGER_FK DEFERRED;
+
+BEGIN
+  p_occ.create_employee(90001,'John Smith',   'CEO',        NULL, '01/01/95',100000,1);
+  p_occ.create_employee(90002,'Jimmy Willis', 'Manager',    90001,'23/09/03',52500, 4);
+  p_occ.create_employee(90003,'Roxy Jones',   'Salesperson',90002,'11/02/17',35000, 4);
+  p_occ.create_employee(90004,'Selwyn Field', 'Salesperson',90003,'20/05/15',32000, 4);
+  p_occ.create_employee(90005,'David Hallett','Engineer',   90006,'17/04/18',40000, 2);
+  p_occ.create_employee(90006,'Sarah Phelps', 'Manager',    90001,'21/03/15',45000, 2);
+  p_occ.create_employee(90007,'Louise Harper','Engineer',   90006,'01/01/13',47000, 2);
+  p_occ.create_employee(90008,'Tina Hart',    'Engineer',   90009,'28/07/14',45000, 3);
+  p_occ.create_employee(90009,'Gus Jones',    'Manager',    90001,'15/05/18',50000, 3);
+  p_occ.create_employee(90010,'Mildred Hall', 'Secretary',  90001,'12/10/96',35000, 1);
+END;
+/
+
+SET CONSTRAINTS ALL IMMEDIATE;
+
+        

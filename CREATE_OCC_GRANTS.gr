@@ -1,0 +1,7 @@
+GRANT SELECT                 ON occ_departments TO OCC_READONLY;
+GRANT SELECT                 ON occ_departments TO OCC_USER;
+GRANT INSERT, UPDATE, DELETE ON occ_departments TO OCC_ADMIN;
+
+GRANT SELECT                 ON occ_employees TO OCC_READONLY;
+GRANT SELECT                 ON occ_employees TO OCC_USER;
+GRANT INSERT, UPDATE, DELETE ON occ_employees TO OCC_ADMIN;

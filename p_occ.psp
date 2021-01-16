@@ -1,0 +1,28 @@
+CREATE OR REPLACE PACKAGE p_occ IS
+
+  -- Global variable may be used to set to facilitate auto commit per statement (if required)
+  -- Defaults to FALSE allow user commit when required
+  g_commit BOOLEAN := FALSE;
+  
+PROCEDURE create_employee
+ (pn_employee_id   IN occ_employees.employee_id%TYPE,
+  pv_employee_name IN occ_employees.employee_name%TYPE,
+  pv_job_title     IN occ_employees.job_title%TYPE,
+  pn_manager_id    IN occ_employees.manager_id%TYPE,
+  pv_date_hired    IN VARCHAR2,
+  pn_salary        IN occ_employees.salary%TYPE,
+  pn_department_id IN occ_employees.department_id%TYPE);
+
+PROCEDURE adjust_salary
+ (pn_employee_id       IN occ_employees.employee_id%TYPE,
+  pn_percentage_change IN NUMBER);
+  
+PROCEDURE transfer_employee
+ (pn_employee_id   IN occ_employees.employee_id%TYPE,
+  pn_department_id IN occ_employees.department_id%TYPE);
+  
+FUNCTION get_employee_salary
+ (pn_employee_id   IN occ_employees.employee_id%TYPE) RETURN occ_employees.salary%TYPE;
+   
+END p_occ;
+/

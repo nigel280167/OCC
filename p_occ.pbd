@@ -1,0 +1,256 @@
+CREATE OR REPLACE PACKAGE BODY p_occ IS
+ 
+  C_WHEN_OTHERS          CONSTANT INTEGER := -20001;
+  C_EMPLOYEE_EXISTS      CONSTANT INTEGER := -20002;
+  C_INVALID_DATE         CONSTANT INTEGER := -20003;
+  C_EMPLOYEE_NOTEXISTS   CONSTANT INTEGER := -20004;
+  C_ROW_LOCKED           CONSTANT INTEGER := -20005;
+  C_DEPARTMENT_NOTEXISTS CONSTANT INTEGER := -20006;
+  
+FUNCTION employee_exists
+ (pn_employee_id IN occ_employees.employee_id%TYPE) RETURN BOOLEAN IS
+
+  CURSOR c_employee IS
+    SELECT 1
+    FROM   occ_employees
+    WHERE  employee_id = pn_employee_id;
+
+  v_exists NUMBER := 0;
+
+BEGIN
+
+  OPEN c_employee;
+  FETCH c_employee INTO v_exists;
+  CLOSE c_employee;
+
+  RETURN (v_exists = 1);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE; 
+END;
+
+FUNCTION department_exists
+ (pn_department_id IN occ_departments.department_id%TYPE) RETURN BOOLEAN IS
+
+  CURSOR c_department IS
+    SELECT 1
+    FROM   occ_departments
+    WHERE  department_id = pn_department_id;
+
+  v_exists NUMBER := 0;
+
+BEGIN
+
+  OPEN c_department;
+  FETCH c_department INTO v_exists;
+  CLOSE c_department;
+
+  RETURN (v_exists = 1);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE; 
+END;
+
+-- Validate the passed date format and convert to formatted date
+FUNCTION validate_date 
+  (pv_date IN VARCHAR2) RETURN DATE IS
+  lv_return DATE;
+BEGIN
+
+  lv_return := TO_DATE(pv_date,'DD/MM/RR');
+   
+  RETURN lv_return;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE_APPLICATION_ERROR(C_INVALID_DATE,
+                           'ERROR: Invalid Date or Date Format ('||pv_date||') - expecting format DD/MM/YY. (p_occ.validate_date)'); 
+END;
+  
+-- Create a record in the occ_employees table
+PROCEDURE create_employee
+ (pn_employee_id   IN occ_employees.employee_id%TYPE,
+  pv_employee_name IN occ_employees.employee_name%TYPE,
+  pv_job_title     IN occ_employees.job_title%TYPE,
+  pn_manager_id    IN occ_employees.manager_id%TYPE,
+  pv_date_hired    IN VARCHAR2,
+  pn_salary        IN occ_employees.salary%TYPE,
+  pn_department_id IN occ_employees.department_id%TYPE) IS
+  
+  lv_date_hired occ_employees.date_hired%TYPE;
+
+BEGIN
+
+-- Validate Employee ID does not already exist
+  IF employee_exists(pn_employee_id) THEN
+    RAISE_APPLICATION_ERROR(C_EMPLOYEE_EXISTS,
+                           'ERROR: An employee with the EMPLOYEE_ID ('||pn_employee_id||') already exists. (p_occ.create_employee)');  
+  END IF;
+
+-- Validate Date format (required format is DD/MM/YY)
+  lv_date_hired := validate_date(pv_date_hired);
+    
+  INSERT
+  INTO    occ_employees
+         (employee_id, 
+          employee_name, 
+          job_title, 
+          date_hired, 
+          salary, 
+          department_id, 
+          manager_id)
+  VALUES (pn_employee_id, 
+          pv_employee_name, 
+          pv_job_title, 
+          lv_date_hired, 
+          pn_salary, 
+          pn_department_id, 
+          pn_manager_id);
+          
+  IF g_commit THEN
+    COMMIT;
+  END IF;
+  
+  dbms_output.put_line(pn_employee_id||' created');
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    dbms_output.put_line('Failed to create employee '||pn_employee_id);
+    RAISE_APPLICATION_ERROR(C_WHEN_OTHERS,SQLERRM||' (p_occ.create_employee)');  
+END create_employee;
+
+PROCEDURE adjust_salary
+ (pn_employee_id       IN occ_employees.employee_id%TYPE,
+  pn_percentage_change IN NUMBER) IS
+  
+  CURSOR c_lock IS
+    SELECT 1
+    FROM   occ_employees
+    WHERE  employee_id = pn_employee_id
+    FOR UPDATE NOWAIT;  
+    
+  lv_lock NUMBER;
+  
+  ROWS_LOCKED EXCEPTION;
+  PRAGMA EXCEPTION_INIT (ROWS_LOCKED,-51);
+  
+BEGIN
+  
+  -- Validate the employee exists
+  IF NOT employee_exists(pn_employee_id) THEN
+    RAISE_APPLICATION_ERROR(C_EMPLOYEE_NOTEXISTS,
+                           'ERROR: This EMPLOYEE_ID ('||pn_employee_id||') does not exists. (p_occ.adjust_salary)');  
+  END IF;  
+  
+  -- Lock the record for update
+  OPEN c_lock;
+  FETCH c_lock INTO lv_lock;
+  CLOSE c_lock;
+
+  UPDATE occ_employees
+  SET    salary      = salary * (pn_percentage_change/100)
+  WHERE  employee_id = pn_employee_id;
+  
+  IF g_commit THEN
+    COMMIT;
+  END IF;
+
+  dbms_output.put_line('Salary changed for '||pn_employee_id);  
+  
+EXCEPTION
+  WHEN ROWS_LOCKED THEN
+    dbms_output.put_line('Unable to apply salary change for '||pn_employee_id||'. Record is locked by another user.');
+    RAISE_APPLICATION_ERROR(C_ROW_LOCKED,SQLERRM||' (p_occ.adjust_salary)');  
+  WHEN OTHERS THEN
+    dbms_output.put_line('Failed apply salary change for '||pn_employee_id);
+    RAISE_APPLICATION_ERROR(C_WHEN_OTHERS,SQLERRM||' (p_occ.adjust_salary)');  
+END;
+
+PROCEDURE transfer_employee
+ (pn_employee_id   IN occ_employees.employee_id%TYPE,
+  pn_department_id IN occ_employees.department_id%TYPE) IS
+  
+  CURSOR c_lock IS
+    SELECT 1
+    FROM   occ_employees
+    WHERE  employee_id = pn_employee_id
+    FOR UPDATE NOWAIT;  
+    
+  lv_lock NUMBER;
+  
+  ROWS_LOCKED EXCEPTION;
+  PRAGMA EXCEPTION_INIT (ROWS_LOCKED,-51);
+  
+BEGIN
+  
+  -- Validate the employee exists
+  IF NOT employee_exists(pn_employee_id) THEN
+    RAISE_APPLICATION_ERROR(C_EMPLOYEE_NOTEXISTS,
+                           'ERROR: This EMPLOYEE_ID ('||pn_employee_id||') does not exist. (p_occ.transfer_employee)');  
+  END IF;  
+  
+  -- Validate the passed department exists
+  IF NOT department_exists(pn_department_id) THEN
+    RAISE_APPLICATION_ERROR(C_DEPARTMENT_NOTEXISTS,
+                           'ERROR: This DEPARTMENT_ID ('||pn_department_id||') does not exist. (p_occ.transfer_employee)');  
+  END IF;    
+  
+  -- Lock the record for update
+  OPEN c_lock;
+  FETCH c_lock INTO lv_lock;
+  CLOSE c_lock;
+
+  UPDATE occ_employees
+  SET    department_id = pn_department_id
+  WHERE  employee_id   = pn_employee_id;
+  
+  IF g_commit THEN
+    COMMIT;
+  END IF;
+
+  dbms_output.put_line('Employee '||pn_employee_id||' transferred.');  
+  
+EXCEPTION
+  WHEN ROWS_LOCKED THEN
+    dbms_output.put_line('Unable to transfer '||pn_employee_id||'. Record is locked by another user.');
+    RAISE_APPLICATION_ERROR(C_ROW_LOCKED,SQLERRM||' (p_occ.transfer_employee)');  
+  WHEN OTHERS THEN
+    dbms_output.put_line('Failed to transfer '||pn_employee_id);
+    RAISE_APPLICATION_ERROR(C_WHEN_OTHERS,SQLERRM||' (p_occ.transfer_employee)');  
+END;
+
+FUNCTION get_employee_salary
+ (pn_employee_id   IN occ_employees.employee_id%TYPE) RETURN occ_employees.salary%TYPE IS
+  
+  CURSOR c_get_salary IS
+    SELECT salary
+    FROM   occ_employees
+    WHERE  employee_id = pn_employee_id;
+ 
+  lv_return occ_employees.salary%TYPE; 
+ 
+BEGIN
+
+  -- Validate the employee exists
+  IF NOT employee_exists(pn_employee_id) THEN
+    RAISE_APPLICATION_ERROR(C_EMPLOYEE_NOTEXISTS,
+                           'ERROR: This EMPLOYEE_ID ('||pn_employee_id||') does not exist. (p_occ.get_employee_salary)');  
+  END IF; 
+  
+  OPEN c_get_salary;
+  FETCH c_get_salary INTO lv_return;
+  CLOSE c_get_salary; 
+
+  RETURN lv_return;
+  dbms_output.put_line('Employee '||pn_employee_id||' salary found.');  
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    dbms_output.put_line('Failed to get salary for employee '||pn_employee_id);
+    RAISE_APPLICATION_ERROR(C_WHEN_OTHERS,SQLERRM||' (p_occ.get_employee_salary)');  
+END;
+
+END p_occ;
+/
